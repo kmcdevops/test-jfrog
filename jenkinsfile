@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+
+    environment {
+        // Docker & JFrog details
+        DOCKER_IMAGE_NAME = 'movie-analyzer-kmc'
+        DOCKER_TAG = '1.0'
+        JFROG_URL = 'https://triali5hfv3.jfrog.io/artifactory/docker-local'
+        // Jenkins credential ID for JFrog
+        JFROG_CREDENTIALS = 'Jfrog-cred'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo "Cloning GitHub repository..."
+                git branch: 'main', url: 'https://github.com/kmcdevops/movie-analyzer-kmc.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "Building Docker image..."
+                sh """
+                    docker build -t ${DOCKER_IMAGE_NAME}:${DOCKER_TAG} .
+                """
+            }
+        }
+
+        stage('Login to JFrog') {
+            steps {
+                echo "Logging into JFrog Docker registry..."
+                withCredentials([usernamePassword(credentialsId: "${JFROG_CREDENTIALS}", passwordVariable: 'JFROG_PASS', usernameVariable: 'JFROG_USER')]) {
+                    sh """
+                        docker login -u $JFROG_USER -p $JFROG_PASS ${JFROG_URL}
+                    """
+                }
+            }
+        }
+
+        stage('Push Docker Image to JFrog') {
+            steps {
+                echo "Tagging and pushing Docker image to JFrog..."
+                sh """
+                    docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_TAG} ${JFROG_URL}/${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
+                    docker push ${JFROG_URL}/${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed. Check the logs."
+        }
+    }
+}
