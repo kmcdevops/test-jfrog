@@ -2,59 +2,43 @@ pipeline {
     agent any
 
     environment {
-        // Docker & JFrog details
-        DOCKER_IMAGE_NAME = 'movie-analyzer-kmc'
-        DOCKER_TAG = '1.0'
-        JFROG_URL = 'https://triali5hfv3.jfrog.io/artifactory/docker-local'
-        // Jenkins credential ID for JFrog
-        JFROG_CREDENTIALS = 'Jfrog-cred'
+        JFROG_URL = 'https://triali5hfv3.jfrog.io/artifactory'
+        JFROG_REPO = 'docker-local'
+        IMAGE_NAME = 'demo-image'
+        IMAGE_TAG = '1.0'
+        CREDENTIALS_ID = 'jfrog-creds'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo "Cloning GitHub repository..."
-                git branch: 'main', url: 'https://github.com/kmcdevops/movie-analyzer-kmc.git'
+                git branch: 'main', url: 'https://github.com/kmcdevops/multibranch-repo.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo "Building Docker image..."
-                sh """
-                    docker build -t ${DOCKER_IMAGE_NAME}:${DOCKER_TAG} .
-                """
-            }
-        }
-
-        stage('Login to JFrog') {
-            steps {
-                echo "Logging into JFrog Docker registry..."
-                withCredentials([usernamePassword(credentialsId: "${JFROG_CREDENTIALS}", passwordVariable: 'JFROG_PASS', usernameVariable: 'JFROG_USER')]) {
-                    sh """
-                        docker login -u $JFROG_USER -p $JFROG_PASS ${JFROG_URL}
-                    """
+                script {
+                    sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG .'
                 }
             }
         }
 
-        stage('Push Docker Image to JFrog') {
+        stage('Tag Docker Image for JFrog') {
             steps {
-                echo "Tagging and pushing Docker image to JFrog..."
-                sh """
-                    docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_TAG} ${JFROG_URL}/${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
-                    docker push ${JFROG_URL}/${DOCKER_IMAGE_NAME}:${DOCKER_TAG}
-                """
+                script {
+                    sh 'docker tag $IMAGE_NAME:$IMAGE_TAG triali5hfv3.jfrog.io/$JFROG_REPO/$IMAGE_NAME:$IMAGE_TAG'
+                }
             }
         }
-    }
 
-    post {
-        success {
-            echo "Pipeline completed successfully!"
-        }
-        failure {
-            echo "Pipeline failed. Check the logs."
+        stage('Login to JFrog and Push') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${CREDENTIALS_ID}", usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh 'docker login -u $USERNAME -p $PASSWORD triali5hfv3.jfrog.io'
+                    sh 'docker push triali5hfv3.jfrog.io/$JFROG_REPO/$IMAGE_NAME:$IMAGE_TAG'
+                }
+            }
         }
     }
 }
